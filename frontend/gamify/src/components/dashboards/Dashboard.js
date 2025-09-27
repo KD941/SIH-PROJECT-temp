@@ -126,13 +126,7 @@ const Dashboard = () => {
                       {item.cta ? (
                         <button
                           className="btn btn-primary py-1 px-3 shadow-glow"
-                          onClick={() => {
-                            if (item.type === 'course') {
-                              navigate('/course/intro-js');
-                            } else if (item.type === 'mimo') {
-                              navigate('/mimo-course');
-                            }
-                          }}
+                          onClick={() => item.path && navigate(item.path)}
                         >{item.cta}</button>
                       ) : (
                         <span className="text-slate-500">{item.status}</span>

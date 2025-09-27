@@ -1,6 +1,7 @@
 const libExpress = require('express');
 const libCors = require('cors');
 const libRandom = require('randomstring');
+const bcrypt = require('bcrypt');
 const { MongoClient } = require('mongodb');
 const { ObjectId } = require('mongodb');
 const server = libExpress();
@@ -152,9 +153,45 @@ server.get('/user/profile', verifyToken, async (req, res) => {
 });
 
 server.post('/user/profile/update', verifyToken, async (req, res) => {
-    // Implementation for updating user profile will go here
-    // It should check the user's role from req.user.role before allowing changes
-    res.status(501).json({ message: "Update not implemented yet." });
+    const { name, password, phone } = req.body;
+    const { id, role } = req.user;
+
+    const updateFields = {};
+
+    // Students can only update their name and password
+    if (role === 'student') {
+        if (name) updateFields.name = name;
+        if (password) updateFields.password = password;
+    } else { // Teachers and Admins have more permissions
+        if (name) updateFields.name = name;
+        if (password) updateFields.password = password;
+        if (phone) updateFields.phone = phone;
+    }
+
+    if (Object.keys(updateFields).length === 0) {
+        return res.status(400).json({ message: "No valid fields to update." });
+    }
+
+    try {
+        await client.connect();
+        const db = await client.db('SsMS');
+        const collection = await db.collection('users');
+
+        const result = await collection.updateOne(
+            { _id: new ObjectId(id) },
+            { $set: updateFields }
+        );
+
+        if (result.matchedCount === 0) {
+            return res.status(404).json({ message: "User not found." });
+        }
+
+        res.json({ message: "Profile updated successfully." });
+    } catch (error) {
+        res.status(500).json({ message: "Server error while updating profile." });
+    } finally {
+        client.close();
+    }
 });
 
 server.get('/student/dashboard', verifyToken, async (req, res) => {
@@ -171,14 +208,99 @@ server.get('/student/dashboard', verifyToken, async (req, res) => {
         sections: [
             {
                 title: 'My Courses & Subjects',
-                items: [ // from DB, filtered for the student
-                    { name: 'Algebra Basics', type: 'math', status: 'Completed', points: '+50' },
-                    { name: 'Intro to Physics', type: 'science', cta: 'CONTINUE', points: 'Course' },
-                    { name: 'JavaScript Fundamentals', type: 'course', cta: 'OPEN', points: 'Course' },
+                items: [
+                    { name: 'Equation Master', type: 'game', cta: 'PLAY', points: 'Graphing', path: '/game/equation-master' },
+                    { name: 'Formula Founders', type: 'game', cta: 'PLAY', points: 'Chemistry', path: '/game/formula-founders' },
+                    { name: 'Algebra Basics', type: 'math', status: 'Completed', points: '+50', path: '/course/algebra' },
+                    { name: 'Intro to Physics', type: 'science', cta: 'CONTINUE', points: 'Course', path: '/course/physics' },
                 ]
             }
         ]
     });
+});
+
+const getTodaysDateString = () => new Date().toISOString().split('T')[0];
+
+server.post('/ai/chat', verifyToken, async (req, res) => {
+    const { message, context } = req.body;
+    const userId = req.user.id;
+
+    let responseMessage = "I'm here to help with your studies! Ask me for a hint or about a concept.";
+
+    // Simple keyword-based AI logic
+    const lowerCaseMessage = message.toLowerCase();
+
+    try {
+        await client.connect();
+        const db = await client.db('SsMS');
+        const usersCollection = await db.collection('users');
+        const user = await usersCollection.findOne({ _id: new ObjectId(userId) });
+
+        if (!user) return res.status(404).json({ message: "User not found" });
+
+        // Daily answer limit logic
+        const today = getTodaysDateString();
+        let dailyAnswers = user.dailyAnswers || 0;
+        if (user.lastAnswerDate !== today) {
+            dailyAnswers = 0;
+        }
+
+        if (lowerCaseMessage.includes('hint')) {
+            if (context.game === 'equation-master') {
+                responseMessage = "Try using 'x' as your variable. For a curve, you can try something like 'x*x' or 'x*x*x'. For a straight line, try '2*x + 5'.";
+            } else if (context.game === 'formula-founders') {
+                responseMessage = "Remember, the number of atoms for each element must be the same on both the reactant and product sides of the equation!";
+            } else {
+                responseMessage = "I can give hints for the game you are currently playing. Start a game first!";
+            }
+        } else if (lowerCaseMessage.includes('answer')) {
+            if (dailyAnswers < 5) {
+                responseMessage = "I can give you an answer, but try to solve it yourself first! The answer is [Correct Answer]. You have used " + (dailyAnswers + 1) + " of 5 answers for today.";
+                await usersCollection.updateOne(
+                    { _id: new ObjectId(userId) },
+                    { $set: { lastAnswerDate: today, dailyAnswers: dailyAnswers + 1 } }
+                );
+            } else {
+                responseMessage = "Sorry, you have already used all 5 of your answers for today. Try again tomorrow!";
+            }
+        } else if (context.game === 'equation-master' || lowerCaseMessage.includes('equation') || lowerCaseMessage.includes('graph')) {
+            responseMessage = "Equation Master helps you visualize math! An equation like 'y = x' is a straight line because for every step you take on the x-axis, you take one step up on the y-axis.";
+        } else if (context.game === 'formula-founders' || lowerCaseMessage.includes('formula') || lowerCaseMessage.includes('chemistry')) {
+            responseMessage = "Formula Founders is about balancing chemical equations. For water (H₂O), you need two Hydrogen atoms and one Oxygen atom. So, to make two molecules of water, you'd need four Hydrogen atoms and two Oxygen atoms in total.";
+        } else {
+            responseMessage = "I can only help with topics related to STEM subjects and the games on this platform. How can I assist you with your learning?";
+        }
+
+        res.json({ reply: responseMessage });
+
+    } catch (error) {
+        console.error("AI chat error:", error);
+        res.status(500).json({ reply: "I seem to be having some trouble thinking right now. Please try again later." });
+    } finally {
+        if (client) {
+            // This check is to prevent closing a client that might already be closed.
+            // A better pattern is to manage one single connection for the app's lifetime.
+            // await client.close();
+        }
+    }
+});
+
+server.post('/user/sync-progress', verifyToken, async (req, res) => {
+    const { progressData } = req.body;
+    const userId = req.user.id;
+
+    if (!progressData || !Array.isArray(progressData)) {
+        return res.status(400).json({ message: 'Invalid progress data' });
+    }
+
+    console.log(`Syncing ${progressData.length} progress records for user ${userId}`);
+    // TODO: Here you would process each record
+    // 1. Save the raw progress to a 'progress' collection in MongoDB.
+    // 2. (Optional) Call a separate Python service for complex evaluation.
+    //    e.g., await axios.post('http://python-eval-service/evaluate', { userId, progressData });
+    // 3. Update user's overall stats (points, badges, etc.) in the 'users' collection.
+
+    res.json({ message: 'Sync successful' });
 });
 
 server.get('/teacher/dashboard', verifyToken, async (req, res) => {

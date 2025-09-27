@@ -7,6 +7,7 @@ const Profile = () => {
   const navigate = useNavigate();
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [formState, setFormState] = useState({});
   const [activeTab, setActiveTab] = useState('overview');
 
   useEffect(() => {
@@ -27,6 +28,7 @@ const Profile = () => {
         if (response.ok) {
           const data = await response.json();
           setUserData(data);
+          setFormState({ name: data.name, password: '', phone: data.phone || '' });
         } else {
           // Handle error, e.g., token expired
           authApi.logout();
@@ -39,7 +41,57 @@ const Profile = () => {
       }
     }
     fetchProfile();
-  }, [navigate]);
+  }, [navigate, role]);
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormState(prevState => ({ ...prevState, [name]: value }));
+  };
+
+  const handleSaveChanges = async () => {
+    const token = localStorage.getItem('glp_auth_token');
+    const payload = {
+      name: formState.name
+    };
+    if (formState.password) {
+      payload.password = formState.password;
+    }
+    if (role !== 'student' && formState.phone) {
+      payload.phone = formState.phone;
+    }
+
+    try {
+      const response = await fetch('http://127.0.0.1:8000/user/profile/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json();
+      alert(data.message);
+      if (response.ok) {
+        setUserData(prev => ({ ...prev, name: formState.name }));
+      }
+    } catch (error) {
+      alert('An error occurred while saving changes.');
+    }
+  };
+
+  const handleLogout = async () => {
+    const token = localStorage.getItem('glp_auth_token');
+    if (token) {
+      try {
+        await fetch('http://127.0.0.1:8000/user/logout', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+      } catch (error) {
+        console.error("Logout API call failed, logging out client-side anyway.", error);
+      }
+    }
+    // Clear client-side session and redirect
+    authApi.logout();
+    navigate('/login');
+  };
 
   const getRoleColor = () => {
     switch (role) {
@@ -89,9 +141,11 @@ const Profile = () => {
             className="btn btn-outline"
           >
             ← Back to Dashboard
-          </button>
+          </button> 
           <h1 className="text-3xl font-bold text-white">Profile</h1>
-          <div className="w-24" />
+          <button onClick={handleLogout} className="btn bg-red-600/80 hover:bg-red-500 text-white font-bold shadow-glow">
+            Logout
+          </button>
         </div>
 
         {/* Profile Header */}
@@ -316,9 +370,11 @@ const Profile = () => {
                 <label className="block text-sm font-medium text-slate-300 mb-2">Display Name</label>
                 <input
                   type="text"
-                  defaultValue={userData.name}
+                  name="name"
+                  value={formState.name || ''}
+                  onChange={handleInputChange}
                   className="w-full px-3 py-2 bg-dark-800 border border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-neon-green text-slate-100"
-                  readOnly={role === 'student'}
+                  readOnly={role === 'teacher' || role === 'admin' ? false : false} // Allow name change for all
                 />
               </div>
               <div>
@@ -333,12 +389,27 @@ const Profile = () => {
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">Password</label>
                 <input
+                  name="password"
                   type="password"
+                  value={formState.password || ''}
+                  onChange={handleInputChange}
                   placeholder={role === 'student' ? "Enter new password to change" : "Enter new password"}
                   className="w-full px-3 py-2 bg-dark-800 border border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-neon-green text-slate-100"
                 />
               </div>
-              <button className="btn bg-gradient-to-r from-neon-green to-neon-blue text-dark-900 font-bold shadow-glow">
+              {role !== 'student' && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Phone</label>
+                  <input
+                    name="phone"
+                    type="tel"
+                    value={formState.phone || ''}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 bg-dark-800 border border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-neon-green text-slate-100"
+                  />
+                </div>
+              )}
+              <button onClick={handleSaveChanges} className="btn bg-gradient-to-r from-neon-green to-neon-blue text-dark-900 font-bold shadow-glow">
                 Save Changes
               </button>
             </div>
