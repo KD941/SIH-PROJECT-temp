@@ -20,12 +20,36 @@ const SignupPage = () => {
     });
   };
 
-  const handleSignup = (e) => {
+  const handleSignup = async (e) => {
     e.preventDefault();
-    // Simulate signup logic
+
     if (formData.fullName && formData.email && formData.password) {
-      // Redirect to appropriate dashboard after signup
-      navigate(`/dashboard/${selectedRole}`);
+      try {
+        const response = await fetch('http://127.0.0.1:8000/user/signup', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            name: formData.fullName,
+            email: formData.email,
+            password: formData.password,
+            role: selectedRole,
+          })
+        });
+        const data = await response.json();
+        if (response.ok) {
+          console.log('Signup successful:', data);
+          // Redirect to appropriate dashboard after successful signup
+          navigate(`/dashboard/${selectedRole}`);
+        } else {
+          console.error('Signup failed:', data);
+          alert(`Signup failed: ${data.message || 'Please try again.'}`);
+        }
+      } catch (error) {
+        console.error('An error occurred during signup:', error);
+        alert('An error occurred. Please check the console and try again.');
+      }
     }
   };
 
@@ -222,4 +246,3 @@ const SignupPage = () => {
 };
 
 export default SignupPage;
-

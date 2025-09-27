@@ -3,87 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { StarIcon, PlanetIcon, RocketIcon, RobotHeadIcon, SparkleIcon, BlobShape } from '../icons/IconLibrary';
 import { bootstrapDefaults, authApi, userApi, classApi } from '../utils/storage';
 
-const roleConfig = {
-  student: {
-    title: 'Student Dashboard',
-    kpis: [
-      { label: 'Points', value: '0' },
-      { label: 'Day Streak', value: '0' },
-      { label: 'Badges', value: '0' }
-    ],  
-    Courses: 'Courses'
-    ,
-    sections: [
-      {
-        title: 'Mathematics',
-        items: [
-          { name: 'Addition Adventure', type: 'math', status: 'Completed', points: '+10' },
-          { name: 'Multiplication Master', type: 'math', status: 'LOCKED', points: '+30' }
-        ]
-      },
-      {
-        title: 'Science',
-        items: [
-          { name: 'Science Quiz', type: 'quiz', status: 'Completed', points: '+15' }
-        ]
-      },
-      {
-        title: 'Technology',
-        items: [
-          { name: 'Intro to JavaScript', type: 'course', cta: 'OPEN', points: 'Course' },
-          { name: 'Mimo Style Course', type: 'mimo', cta: 'PLAY', points: 'Interactive' },
-          { name: 'Word Matching', type: 'matching', cta: 'PLAY NOW', points: '+20' }
-        ]
-      }
-    ]
-  },
-  teacher: {
-    title: 'Teacher Dashboard',
-    kpis: [
-      { label: 'Total Students', value: '120' },
-      { label: 'Avg Progress', value: '72%' },
-      { label: 'Weekly Growth', value: '+8%' },
-      { label: 'Engagement', value: '85%' }
-    ],
-    sections: [
-      {
-        title: 'Classroom Overview',
-        table: {
-          headers: ['Student Name', 'Progress', 'Status', 'Weak Area', 'Last Active'],
-          rows: [
-            ['Rahul Kumar', '75%', 'active', 'Algebra', '2 hours ago'],
-            ['Priya Sharma', '85%', 'active', '—', '1 hour ago'],
-            ['Amit Patel', '60%', 'inactive', 'Geometry', '1 day ago'],
-            ['Neha Verma', '92%', 'active', '—', '30 min ago'],
-            ['Raj Singh', '45%', 'struggling', 'Fractions', '3 days ago']
-          ]
-        }
-      }
-    ]
-  },
- admin: {
-    title: 'School Administration',
-    kpis: [
-      { label: 'Total Students', value: '450' },
-      { label: 'Teachers', value: '25' },
-      { label: 'Courses', value: '12' },
-      { label: 'Classes', value: '18' },
-      { label: 'Performance', value: '75%' }
-    ],
-    sections: [
-      {
-        title: 'Quick Actions',
-        actions: [
-          { label: 'Add Teacher', color: 'from-purple-500 to-blue-500' },
-          { label: 'Enroll Student', color: 'from-green-500 to-emerald-600' },
-          { label: 'Add Course', color: 'from-amber-500 to-orange-600' },
-          { label: 'Export Report', color: 'from-gray-500 to-gray-600' }
-        ]
-      }
-    ]
-  }
-};
-
 const Badge = ({ label, value }) => (
   <div className="card text-center">
     <div className="text-2xl font-bold mb-1">{value}</div>
@@ -95,11 +14,44 @@ const Dashboard = () => {
   const { role } = useParams();
   const navigate = useNavigate();
   const [refresh, setRefresh] = useState(0);
+  const [dashboardData, setDashboardData] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => { bootstrapDefaults(); }, []);
+  useEffect(() => {
+    const fetchData = async () => {
+      const token = localStorage.getItem('glp_auth_token');
+      if (!token) {
+        navigate('/login');
+        return;
+      }
+
+      const API_URL = 'http://127.0.0.1:8000';
+      let endpoint = '';
+      if (role === 'student') endpoint = '/student/dashboard';
+      else if (role === 'teacher') endpoint = '/teacher/dashboard';
+      else if (role === 'admin') endpoint = '/admin/dashboard';
+
+      if (endpoint) {
+        try {
+          const response = await fetch(`${API_URL}${endpoint}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          const data = await response.json();
+          setDashboardData(data);
+        } catch (error) {
+          console.error('Failed to fetch dashboard data:', error);
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchData();
+  }, [role, navigate, refresh]);
+
   const currentUser = authApi.current();
-
-  const cfg = roleConfig[role] || roleConfig.student;
 
   return (
     <div className="min-h-screen bg-dark-900 bg-space-gradient p-6 text-slate-100 relative overflow-hidden">
@@ -123,7 +75,7 @@ const Dashboard = () => {
       <div className="container mx-auto mb-6 relative z-10">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white">{cfg.title}</h1>
+            <h1 className="text-2xl font-bold text-white">{loading ? 'Loading...' : dashboardData?.title}</h1>
             <p className="text-sm text-slate-400">Welcome back!</p>
           </div>
           <div className="flex items-center gap-3">
@@ -135,18 +87,18 @@ const Dashboard = () => {
       </div>
 
       {/* KPIs */}
-      <div className="container mx-auto grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 relative z-10">
-        {cfg.kpis.map((k) => (
-          <Badge key={k.label} label={k.label} value={k.value} />
-        ))}
-      </div>
-      <div>
-           {cfg.Courses}
-      </div>
+      {!loading && dashboardData?.kpis && (
+        <div className="container mx-auto grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 relative z-10">
+          {dashboardData.kpis.map((k) => (
+            <Badge key={k.label} label={k.label} value={k.value} />
+          ))}
+        </div>
+      )}
 
       {/* Sections */}
-      <div className="container mx-auto grid gap-6 relative z-10">
-        {cfg.sections.map((section) => (
+      {!loading && dashboardData?.sections && (
+        <div className="container mx-auto grid gap-6 relative z-10">
+          {dashboardData.sections.map((section) => (
           <div key={section.title} className="card">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-white">{section.title}</h2>
@@ -216,7 +168,8 @@ const Dashboard = () => {
             )}
           </div>
         ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -354,6 +307,3 @@ const VerifyUsersPanel = ({ onChange }) => {
     </div>
   );
 };
-
-
-

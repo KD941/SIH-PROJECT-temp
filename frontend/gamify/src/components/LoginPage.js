@@ -20,15 +20,29 @@ const LoginPage = () => {
 
   useEffect(() => { bootstrapDefaults(); }, []);
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     const email = (formData.email || '').trim();
     const password = (formData.password || '').trim();
-    bootstrapDefaults();
-    const user = authApi.login(email, password);
-    if (user) {
-      navigate(`/dashboard/${user.role}`);
-    } else alert('Invalid credentials or user not verified');
+    try {
+      const response = await fetch('http://127.0.0.1:8000/user/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ email, password, role: selectedRole })
+      });
+      const data = await response.json();
+      if (response.ok && data.user) {
+        authApi.login(data.user, data.token);
+        navigate(`/dashboard/${data.user.role}`);
+      } else {
+        alert(data.message || 'Invalid credentials or user not verified');
+      }
+    } catch (error) {
+      console.error('An error occurred during login:', error);
+      alert('An error occurred. Please check the console and try again.');
+    }
   };
 
   const getRoleIcon = (role) => {
