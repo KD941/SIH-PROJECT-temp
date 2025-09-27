@@ -5,73 +5,41 @@ import { authApi } from './utils/storage';
 const Profile = () => {
   const { role } = useParams();
   const navigate = useNavigate();
+  const [userData, setUserData] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
 
-  // Mock user data based on role
-  const getUserData = () => {
-    switch (role) {
-      case 'student':
-        return {
-          name: 'Alex Johnson',
-          email: 'alex@school.com',
-          avatar: '👨‍🎓',
-          level: 5,
-          points: 1250,
-          streak: 7,
-          badges: ['First Steps', 'Quiz Master', 'Speed Learner'],
-          courses: [
-            { name: 'Intro to JavaScript', progress: 75, completed: false },
-            { name: 'Web Development Basics', progress: 100, completed: true },
-            { name: 'Data Structures', progress: 30, completed: false }
-          ],
-          achievements: [
-            { title: 'Early Bird', description: 'Completed 5 lessons before 8 AM', date: '2024-01-15' },
-            { title: 'Streak Master', description: 'Maintained 7-day learning streak', date: '2024-01-20' },
-            { title: 'Quiz Champion', description: 'Scored 100% on 3 consecutive quizzes', date: '2024-01-18' }
-          ]
-        };
-      case 'teacher':
-        return {
-          name: 'Dr. Sarah Wilson',
-          email: 'sarah@school.com',
-          avatar: '👩‍🏫',
-          students: 45,
-          courses: 8,
-          rating: 4.8,
-          classes: [
-            { name: 'Grade 8-A', students: 25, progress: 78 },
-            { name: 'Grade 9-B', students: 20, progress: 85 }
-          ],
-          recentActivity: [
-            { action: 'Created new quiz', course: 'JavaScript Basics', time: '2 hours ago' },
-            { action: 'Graded assignments', course: 'Web Development', time: '4 hours ago' },
-            { action: 'Added new lesson', course: 'Data Structures', time: '1 day ago' }
-          ]
-        };
-      case 'admin':
-        return {
-          name: 'Principal Michael Chen',
-          email: 'michael@school.com',
-          avatar: '👨‍💼',
-          school: 'Tech Academy',
-          totalStudents: 450,
-          totalTeachers: 25,
-          totalCourses: 12,
-          performance: 87,
-          recentReports: [
-            { title: 'Monthly Performance Report', date: '2024-01-20', status: 'Completed' },
-            { title: 'Student Engagement Analysis', date: '2024-01-18', status: 'In Progress' },
-            { title: 'Teacher Evaluation Summary', date: '2024-01-15', status: 'Completed' }
-          ]
-        };
-      default:
-        return {};
+  useEffect(() => {
+    const fetchProfile = async () => {
+      const token = localStorage.getItem('glp_auth_token');
+      if (!token) {
+        navigate('/login');
+        return;
+      }
+
+      try {
+        setLoading(true);
+        const response = await fetch('http://127.0.0.1:8000/user/profile', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setUserData(data);
+        } else {
+          // Handle error, e.g., token expired
+          authApi.logout();
+          navigate('/login');
+        }
+      } catch (error) {
+        console.error("Failed to fetch profile:", error);
+      } finally {
+        setLoading(false);
+      }
     }
-  };
-
-  const userData = getUserData();
-
-  const current = authApi.current();
+    fetchProfile();
+  }, [navigate]);
 
   const getRoleColor = () => {
     switch (role) {
@@ -107,6 +75,10 @@ const Profile = () => {
     }
   };
 
+  if (loading || !userData) {
+    return <div className="min-h-screen bg-dark-900 flex items-center justify-center text-white">Loading Profile...</div>;
+  }
+
   return (
     <div className="min-h-screen bg-dark-900 bg-space-gradient text-slate-100 p-6">
       <div className="container mx-auto max-w-6xl">
@@ -130,25 +102,25 @@ const Profile = () => {
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-2">
-                <h2 className="text-2xl font-bold text-white">{userData.name}</h2>
+                <h2 className="text-2xl font-bold text-white">{userData.name}</h2> <span className="text-slate-500 text-sm">(ID: {userData.id})</span>
                 <div className={`px-3 py-1 bg-gradient-to-r ${getRoleColor()} text-white rounded-full text-sm font-medium`}>
                   {role?.toUpperCase()}
                 </div>
               </div>
               <p className="text-slate-400 mb-2">{userData.email}</p>
-              {role === 'student' && (
+              {role === 'student' && userData.performance && (
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2">
                     <svg className="w-5 h-5 text-neon-green" fill="currentColor" viewBox="0 0 20 20">
                       <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                     </svg>
-                    <span className="text-slate-300">Level {userData.level}</span>
+                    <span className="text-slate-300">Level {userData.performance.level}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <svg className="w-5 h-5 text-neon-blue" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M12.395 2.553a1 1 0 00-1.45-.385c-.345.23-.614.558-.822.88-.214.33-.403.713-.57 1.116-.334.804-.614 1.768-.84 2.734a31.365 31.365 0 00-.613 3.58 2.64 2.64 0 01-.945-1.067c-.328-.68-.398-1.534-.398-2.654A1 1 0 005.05 6.05 6.981 6.981 0 003 11a7 7 0 1011.95-4.95c-.592-.591-.98-.985-1.348-1.467-.363-.476-.724-1.063-1.207-2.03zM12.12 15.12A3 3 0 017 13s.879.5 2.5.5c0-1 .5-4 1.25-4.5.5 1 .786 1.293 1.371 1.879A2.99 2.99 0 0113 13a2.99 2.99 0 01-.879 2.121z" clipRule="evenodd" />
                     </svg>
-                    <span className="text-slate-300">{userData.points} Points</span>
+                    <span className="text-slate-300">{userData.performance.points} Points</span>
                   </div>
                 </div>
               )}
@@ -176,12 +148,12 @@ const Profile = () => {
         {/* Tab Content */}
         {activeTab === 'overview' && (
           <div className="grid md:grid-cols-2 gap-6">
-            {role === 'student' && (
+            {role === 'student' && userData.performance && (
               <>
                 <div className="card border border-slate-700">
                   <h3 className="text-lg font-semibold text-white mb-4">Badges Earned</h3>
                   <div className="space-y-3">
-                    {userData.badges.map((badge, index) => (
+                    {userData.performance.badges.map((badge, index) => (
                       <div key={index} className="flex items-center gap-3 p-3 bg-dark-800 rounded-lg">
                         <div className="w-10 h-10 bg-gradient-to-r from-neon-yellow to-orange-500 rounded-full flex items-center justify-center">
                           <svg className="w-5 h-5 text-dark-900" fill="currentColor" viewBox="0 0 20 20">
@@ -197,7 +169,7 @@ const Profile = () => {
                 <div className="card border border-slate-700">
                   <h3 className="text-lg font-semibold text-white mb-4">Recent Achievements</h3>
                   <div className="space-y-3">
-                    {userData.achievements.map((achievement, index) => (
+                    {userData.performance.achievements.map((achievement, index) => (
                       <div key={index} className="p-3 bg-dark-800 rounded-lg">
                         <div className="flex items-center justify-between mb-1">
                           <h4 className="font-medium text-white">{achievement.title}</h4>
@@ -211,11 +183,11 @@ const Profile = () => {
               </>
             )}
 
-            {role === 'teacher' && (
+            {role === 'teacher' && userData.classes && (
               <>
                 <div className="card border border-slate-700">
                   <h3 className="text-lg font-semibold text-white mb-4">Class Overview</h3>
-                  <div className="space-y-3">
+                  <div className="space-y-3"> 
                     {userData.classes.map((cls, index) => (
                       <div key={index} className="p-4 bg-dark-800 rounded-lg">
                         <div className="flex items-center justify-between mb-2">
@@ -236,8 +208,8 @@ const Profile = () => {
 
                 <div className="card border border-slate-700">
                   <h3 className="text-lg font-semibold text-white mb-4">Recent Activity</h3>
-                  <div className="space-y-3">
-                    {userData.recentActivity.map((activity, index) => (
+                  <div className="space-y-3"> 
+                    {userData.recentActivity.map((activity, index) => ( 
                       <div key={index} className="p-3 bg-dark-800 rounded-lg">
                         <div className="flex items-center justify-between mb-1">
                           <h4 className="font-medium text-white">{activity.action}</h4>
@@ -251,7 +223,7 @@ const Profile = () => {
               </>
             )}
 
-            {role === 'admin' && (
+            {role === 'admin' && userData.totalStudents && (
               <>
                 <div className="card border border-slate-700">
                   <h3 className="text-lg font-semibold text-white mb-4">School Statistics</h3>
@@ -277,8 +249,8 @@ const Profile = () => {
 
                 <div className="card border border-slate-700">
                   <h3 className="text-lg font-semibold text-white mb-4">Recent Reports</h3>
-                  <div className="space-y-3">
-                    {userData.recentReports.map((report, index) => (
+                  <div className="space-y-3"> 
+                    {userData.recentReports.map((report, index) => ( 
                       <div key={index} className="p-3 bg-dark-800 rounded-lg">
                         <div className="flex items-center justify-between mb-1">
                           <h4 className="font-medium text-white">{report.title}</h4>
@@ -303,8 +275,8 @@ const Profile = () => {
         {activeTab === 'progress' && (
           <div className="card border border-slate-700">
             <h3 className="text-lg font-semibold text-white mb-4">Progress Tracking</h3>
-            {role === 'student' && (
-              <div className="space-y-4">
+            {role === 'student' && userData.courses && (
+              <div className="space-y-4"> 
                 {userData.courses.map((course, index) => (
                   <div key={index} className="p-4 bg-dark-800 rounded-lg">
                     <div className="flex items-center justify-between mb-2">
@@ -346,6 +318,7 @@ const Profile = () => {
                   type="text"
                   defaultValue={userData.name}
                   className="w-full px-3 py-2 bg-dark-800 border border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-neon-green text-slate-100"
+                  readOnly={role === 'student'}
                 />
               </div>
               <div>
@@ -353,14 +326,15 @@ const Profile = () => {
                 <input
                   type="email"
                   defaultValue={userData.email}
-                  className="w-full px-3 py-2 bg-dark-800 border border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-neon-green text-slate-100"
+                  className="w-full px-3 py-2 bg-dark-800 border border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-neon-green text-slate-100 disabled:opacity-50"
+                  readOnly
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">Password</label>
                 <input
                   type="password"
-                  placeholder="Enter new password"
+                  placeholder={role === 'student' ? "Enter new password to change" : "Enter new password"}
                   className="w-full px-3 py-2 bg-dark-800 border border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-neon-green text-slate-100"
                 />
               </div>
@@ -376,5 +350,3 @@ const Profile = () => {
 };
 
 export default Profile;
-
-

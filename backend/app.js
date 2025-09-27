@@ -9,6 +9,30 @@ const client = new MongoClient('mongodb://Admin:TEAMABC123@localhost:27017/SsMS?
 server.use(libCors());
 //COMMON API'S(get)
 
+const sessions = {}; // In-memory session store (for demonstration)
+
+// Middleware for token verification
+const verifyToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (token == null) return res.sendStatus(401);
+
+    const session = sessions[token];
+    if (!session) {
+        return res.status(403).json({ message: "Invalid token" });
+    }
+
+    // Token is valid, attach user info to the request
+    req.user = session.user;
+    next();
+};
+
+const removeUserSession = (userId) => {
+    const token = Object.keys(sessions).find(key => sessions[key].user.id.toString() === userId.toString());
+    if (token) delete sessions[token];
+};
+
 //COMMON API'S(post)
 server.post('/user/signup', async (req, res) => {
     if (req.body.name && req.body.email && req.body.password &&req.body.role && req.body.phone) {
@@ -62,6 +86,7 @@ server.post('/user/login', async (req, res) => {
                     role: result[0].role,
                 };
                 const token = libRandom.generate();
+                sessions[token] = { user: user }; // Store session
                 res.json({ message: "Login successful", user: user, token: token });
             } else {
                 res.status(401).json({ message: "Invalid password" });
@@ -74,9 +99,65 @@ server.post('/user/login', async (req, res) => {
     }
 })
 
-// TODO: Add a middleware for token verification
+server.post('/user/logout', verifyToken, (req, res) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (sessions[token]) {
+        delete sessions[token];
+        res.json({ message: "Logout successful" });
+    } else {
+        res.status(400).json({ message: "Session not found" });
+    }
+});
 
-server.get('/student/dashboard', async (req, res) => {
+server.get('/user/profile', verifyToken, async (req, res) => {
+    try {
+        await client.connect();
+        const db = await client.db('SsMS');
+        const collection = await db.collection('users');
+        const user = await collection.findOne({ _id: new ObjectId(req.user.id) });
+
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        // Add role-specific data
+        let profileData = {
+            id: user._id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            avatar: user.name.charAt(0).toUpperCase(),
+        };
+
+        if (user.role === 'student') {
+            // In a real app, this would be calculated from other collections
+            profileData.performance = {
+                level: 12,
+                points: 1500,
+                badges: ["Math Whiz", "Science Explorer", "Code Starter"],
+                achievements: [
+                    { title: "Completed Algebra Basics", date: "3 days ago", description: "Mastered all modules in the algebra course." },
+                    { title: "5-Day Streak", date: "1 day ago", description: "Logged in and completed a task for 5 consecutive days." }
+                ],
+            };
+        }
+
+        res.json(profileData);
+    } catch (error) {
+        res.status(500).json({ message: "Server error while fetching profile" });
+    } finally {
+        client.close();
+    }
+});
+
+server.post('/user/profile/update', verifyToken, async (req, res) => {
+    // Implementation for updating user profile will go here
+    // It should check the user's role from req.user.role before allowing changes
+    res.status(501).json({ message: "Update not implemented yet." });
+});
+
+server.get('/student/dashboard', verifyToken, async (req, res) => {
     // In a real app, you'd get the user ID from the verified token
     // const userId = req.user.id;
     // Then fetch data for that user from the database
@@ -100,7 +181,7 @@ server.get('/student/dashboard', async (req, res) => {
     });
 });
 
-server.get('/teacher/dashboard', async (req, res) => {
+server.get('/teacher/dashboard', verifyToken, async (req, res) => {
     // const teacherId = req.user.id;
     // Fetch classes and students for this teacher
     res.json({
@@ -117,7 +198,7 @@ server.get('/teacher/dashboard', async (req, res) => {
     });
 });
 
-server.get('/admin/dashboard', async (req, res) => {
+server.get('/admin/dashboard', verifyToken, async (req, res) => {
     // Fetch school-wide statistics
     await client.connect();
     const db = await client.db('SsMS');
